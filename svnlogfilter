@@ -1,0 +1,161 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+
+# ====================================================================
+# Show log messages matching certain patterns.  Usage:
+#
+#    svnlogfilter [--user USER] [--not-user USER] [--regex REGEX]
+#        [--not-regex REGEX]
+#
+# See pod for details.
+#
+# ====================================================================
+# Copyright (c) 2005 David Marshall <marshall@chezmarshall.com>.
+# All rights reserved.
+#
+# This software is licensed as described in the file COPYING, which
+# you should have received as part of this ^distribution.  The terms
+# are also available at http://subversion.tigris.org/license-1.html.
+# If newer versions of this license are posted there, you may use a
+# newer version instead, at your option.
+#
+# This software consists of voluntary contributions made by many
+# individuals.  For exact contribution history, see the revision
+# history and logs, available at http://subversion.tigris.org/.
+# ====================================================================
+
+use Getopt::Long;
+use Pod::Usage;
+
+my ($user, $not_user, $regex, $not_regex, $help, $man);
+
+GetOptions(
+       'user=s' => \$user,
+       'not-user=s' => \$not_user,
+       'regex=s' => \$regex,
+       'not-regex=s' => \$not_regex,
+       'help|?' => \$help,
+       'man' => \$man,
+) or pod2usage(2);
+
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+
+pod2usage("$0: either user, not-user, regex, or not-regex required\n")
+    unless $user || $not_user || $regex || $not_regex;
+
+if ($regex) {
+       eval {
+               $regex = qr/$regex/;
+       };
+
+       pod2usage("$0: regex error: $@\n") if $@;
+}
+
+if ($not_regex) {
+       eval {
+               $not_regex = qr/$not_regex/;
+       };
+
+       pod2usage("$0: regex error: $@\n") if $@;
+}
+
+pod2usage("$0: bogus user name: $user\n") if $user && $user =~ /\W/;
+pod2usage("$0: bogus user name: $not_user\n") if $not_user &&
+$not_user =~ /\W/;
+
+local $/ = '-' x 72 . "\n";
+local $\ = $/;
+local $, = $/;
+local $" = $/;
+
+chomp (my @log = <>);
+
+# Make sure that each entry.
+# looks right.  That is, make a basic check to see whether a line of
+# exactly 72 hyphens *really* is a separator between two log entries
+# and not just pretending to be one.  We do not want to be sucked into
+# its vortex of lies.
+for (my $i = $#log; $i > 0; $i--) {
+    next if $log[$i] =~ /\Ar\d+.*\d lines/; # probably a real entry
+    $log[$i - 1] = "@log[$i-1,$i]"; # joined by $"
+    splice @log, $i, 1;
+}
+
+if ($user) {
+       my $user_regex = qr/^r\d+\s+\|\s+$user/;
+       @log = grep m/$user_regex/, @log;
+}
+
+if ($not_user) {
+        my $not_regex = qr/^r\d+\s+\|s+$not_user/;
+        @log = grep !/$not_regex/, @log;
+}
+
+if ($regex) {
+       @log = grep m/$regex/, @log;
+}
+
+if ($not_regex) {
+        @log = grep !/$not_regex/, @log;
+}
+
+print ('', @log);
+__END__
+
+=head1 NAME
+
+svnlogfilter - filter Subversion log output
+
+=head1 SYNOPSIS
+
+svnlogfilter [options] [file...]
+svn log ... | svnlogfilter [options]
+
+ Options:
+  --user       include only changes made by the named user
+  --not-user    exclude changes made by the named user
+  --regex      include only changes that match this regex
+  --not-regex   exclude changes that match this regex
+  --help       brief help message
+  --man                full documentation
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--user>
+
+Includes only log entries describing changes by this user.
+
+=item B<--not-user>
+
+Excludes log entries describing changes by this user.
+
+=item B<--regex>
+
+Includes only log entries that match this regex.
+
+=item B<--not-regex>
+
+Excludes log entries that match this regex.
+
+=item B<--help>
+
+Prints a brief help message and exits.
+
+=item B<--man>
+
+Prints the manual page and exits.
+
+=back
+
+=head1 DESCRIPTION
+
+This script filters a list of Subversion log messages to find those
+committed by a particular user, those that match a particular regular
+expression, or both.  It is also possible to filter out users and
+regexes.
+
+=cut
